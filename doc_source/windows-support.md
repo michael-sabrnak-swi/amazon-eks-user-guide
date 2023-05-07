@@ -84,6 +84,57 @@ If you enabled Windows support on a cluster that is earlier than a Kubernetes or
    kubectl apply -f vpc-resource-controller-configmap.yaml
    ```
 
+1. Determine if your cluster has the required cluster role binding\.
+
+   ```
+   kubectl get clusterrolebinding eks:kube-proxy-windows
+   ```
+
+   If output similar to the following example output is returned, then the cluster has the necessary role binding\.
+
+   ```
+   NAME                     ROLE                              AGE
+   eks:kube-proxy-windows   ClusterRole/system:node-proxier   19h
+   ```
+
+   If the output includes `Error from server (NotFound)`, then the cluster does not have the necessary cluster role binding\. Add the binding by creating a file named `eks-kube-proxy-windows-crb.yaml` with the following content\.
+
+   ```
+   kind: ClusterRoleBinding
+   apiVersion: rbac.authorization.k8s.io/v1beta1
+   metadata:
+     name: eks:kube-proxy-windows
+     labels:
+       k8s-app: kube-proxy
+       eks.amazonaws.com/component: kube-proxy
+   subjects:
+     - kind: Group
+       name: "eks:kube-proxy-windows"
+   roleRef:
+     kind: ClusterRole
+     name: system:node-proxier
+     apiGroup: rbac.authorization.k8s.io
+   ```
+
+   Apply the configuration to the cluster\.
+
+   ```
+   kubectl apply -f eks-kube-proxy-windows-crb.yaml
+   ```
+
+   In order to allow your Windows worker nodes to access the necessary networking components, add the following to the end of the aws-auth ConfigMap as part of the mapRoles section in the kube-system namespace:\.
+
+   ```
+   - rolearn: arn:aws:iam::444455556666:role/Admin
+     username: system:node:{{EC2PrivateDNSName}}
+     groups:
+       - system:bootstrappers
+       - system:nodes
+       - eks:kube-proxy-windows
+   ```
+
+   Replace the rolearn with your ARN for the node role. See [Enabling IAM user and role access to your cluster](https://docs.aws.amazon.com/eks/latest/userguide/add-user-role.html) for details about the aws-auth ConfigMap\.
+
 ## Removing legacy Windows support from your data plane<a name="remove-windows-support-data-plane"></a>
 
 If you enabled Windows support on a cluster that is earlier than a Kubernetes or platform version listed in the [Prerequisites](#windows-support-prerequisites), then you must first remove the `vpc-resource-controller` and `vpc-admission-webhook` from your data plane\. They're deprecated and no longer needed because the functionality that they provided is now enabled on the control plane\.
